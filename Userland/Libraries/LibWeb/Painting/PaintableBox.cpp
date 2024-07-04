@@ -901,14 +901,12 @@ Optional<HitTestResult> PaintableBox::hit_test(CSSPixelPoint position, HitTestTy
     Optional<HitTestResult> result;
     (void)PaintableBox::hit_test(position, type, [&](HitTestResult candidate) {
         if (candidate.paintable->visible_for_hit_testing()) {
-            if (!result.has_value() || candidate.distance < result->distance) {
+            if (!result.has_value() || candidate.vertical_distance < result->vertical_distance || candidate.horizontal_distance < result->horizontal_distance)
                 result = move(candidate);
-            }
         }
 
-        if (result.has_value() && (type == HitTestType::Exact || result->distance == 0)) {
+        if (result.has_value() && (type == HitTestType::Exact || result->vertical_distance + result->horizontal_distance == 0))
             return TraversalDecision::Break;
-        }
         return TraversalDecision::Continue;
     });
     return result;
@@ -942,7 +940,7 @@ TraversalDecision PaintableWithLines::hit_test(CSSPixelPoint position, HitTestTy
         if (fragment_absolute_rect.contains(position_adjusted_by_scroll_offset)) {
             if (fragment.paintable().hit_test(position, type, callback) == TraversalDecision::Break)
                 return TraversalDecision::Break;
-            HitTestResult hit_test_result { const_cast<Paintable&>(fragment.paintable()), fragment.text_index_at(position_adjusted_by_scroll_offset.x()), 0 };
+            HitTestResult hit_test_result { const_cast<Paintable&>(fragment.paintable()), fragment.text_index_at(position_adjusted_by_scroll_offset.x()), 0, 0 };
             if (callback(hit_test_result) == TraversalDecision::Break)
                 return TraversalDecision::Break;
         }
@@ -957,7 +955,7 @@ TraversalDecision PaintableWithLines::hit_test(CSSPixelPoint position, HitTestTy
                 return HitTestResult {
                     .paintable = const_cast<Paintable&>(fragment.paintable()),
                     .index_in_node = fragment.start() + fragment.length(),
-                    .distance = abs(fragment_absolute_rect.bottom() - position_adjusted_by_scroll_offset.y()),
+                    .vertical_distance = abs(fragment_absolute_rect.bottom() - position_adjusted_by_scroll_offset.y()),
                 };
             }
             if (fragment_absolute_rect.top() <= position_adjusted_by_scroll_offset.y()) {     // vertically within the fragment
@@ -965,14 +963,16 @@ TraversalDecision PaintableWithLines::hit_test(CSSPixelPoint position, HitTestTy
                     return HitTestResult {
                         .paintable = const_cast<Paintable&>(fragment.paintable()),
                         .index_in_node = fragment.start(),
-                        .distance = abs(fragment_absolute_rect.left() - position_adjusted_by_scroll_offset.x()),
+                        .vertical_distance = 0,
+                        .horizontal_distance = abs(fragment_absolute_rect.left() - position_adjusted_by_scroll_offset.x()),
                     };
                 }
                 // right of the fragment
                 return HitTestResult {
                     .paintable = const_cast<Paintable&>(fragment.paintable()),
                     .index_in_node = fragment.start() + fragment.length(),
-                    .distance = abs(fragment_absolute_rect.right() - position_adjusted_by_scroll_offset.x()),
+                    .vertical_distance = 0,
+                    .horizontal_distance = abs(fragment_absolute_rect.right() - position_adjusted_by_scroll_offset.x()),
                 };
             }
 

@@ -203,7 +203,7 @@ TraversalDecision InlinePaintable::hit_test(CSSPixelPoint position, HitTestType 
         if (fragment_absolute_rect.contains(position_adjusted_by_scroll_offset)) {
             if (fragment.paintable().hit_test(position, type, callback) == TraversalDecision::Break)
                 return TraversalDecision::Break;
-            auto hit_test_result = HitTestResult { const_cast<Paintable&>(fragment.paintable()), fragment.text_index_at(position_adjusted_by_scroll_offset.x()), 0 };
+            auto hit_test_result = HitTestResult { const_cast<Paintable&>(fragment.paintable()), fragment.text_index_at(position_adjusted_by_scroll_offset.x()), 0, 0 };
             if (callback(hit_test_result) == TraversalDecision::Break)
                 return TraversalDecision::Break;
         }
@@ -218,7 +218,7 @@ TraversalDecision InlinePaintable::hit_test(CSSPixelPoint position, HitTestType 
                 return HitTestResult {
                     .paintable = const_cast<Paintable&>(fragment.paintable()),
                     .index_in_node = fragment.start() + fragment.length(),
-                    .distance = abs(fragment_absolute_rect.bottom() - position_adjusted_by_scroll_offset.y()),
+                    .vertical_distance = abs(fragment_absolute_rect.bottom() - position_adjusted_by_scroll_offset.y()),
                 };
             }
             if (fragment_absolute_rect.top() <= position_adjusted_by_scroll_offset.y()) {     // vertically within the fragment
@@ -226,14 +226,16 @@ TraversalDecision InlinePaintable::hit_test(CSSPixelPoint position, HitTestType 
                     return HitTestResult {
                         .paintable = const_cast<Paintable&>(fragment.paintable()),
                         .index_in_node = fragment.start(),
-                        .distance = abs(fragment_absolute_rect.left() - position_adjusted_by_scroll_offset.x()),
+                        .vertical_distance = 0,
+                        .horizontal_distance = abs(fragment_absolute_rect.left() - position_adjusted_by_scroll_offset.x()),
                     };
                 }
                 // right of the fragment
                 return HitTestResult {
                     .paintable = const_cast<Paintable&>(fragment.paintable()),
                     .index_in_node = fragment.start() + fragment.length(),
-                    .distance = abs(fragment_absolute_rect.right() - position_adjusted_by_scroll_offset.x()),
+                    .vertical_distance = 0,
+                    .horizontal_distance = abs(fragment_absolute_rect.right() - position_adjusted_by_scroll_offset.x()),
                 };
             }
 
