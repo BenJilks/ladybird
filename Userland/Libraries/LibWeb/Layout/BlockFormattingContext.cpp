@@ -676,6 +676,12 @@ void BlockFormattingContext::layout_block_level_box(Box const& box, BlockContain
         left_space_before_children_formatted = space_used_before_children_formatted.left;
     }
 
+    // Compute percentage height before laying out the children.
+    if (box.computed_values().height().contains_percentage()) {
+        compute_height(box, available_space);
+        box_state.set_has_definite_height(true);
+    }
+
     if (independent_formatting_context) {
         // This box establishes a new formatting context. Pass control to it.
         independent_formatting_context->run(box, layout_mode, box_state.available_inner_space_or_constraints_from(available_space));
