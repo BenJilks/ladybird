@@ -702,7 +702,14 @@ void BlockFormattingContext::layout_block_level_box(Box const& box, BlockContain
                 });
             }
 
-            layout_block_level_children(verify_cast<BlockContainer>(box), layout_mode, box_state.available_inner_space_or_constraints_from(available_space));
+            auto inner_available_space = box_state.available_inner_space_or_constraints_from(available_space);
+            if (!box_state.has_definite_height() && available_space.height.is_definite()) {
+                inner_available_space.height = AvailableSize::make_definite(available_space.height.to_px_or_zero()
+                    - box_state.margin_top
+                    - box_state.margin_bottom);
+            }
+
+            layout_block_level_children(verify_cast<BlockContainer>(box), layout_mode, inner_available_space);
         }
     }
 
