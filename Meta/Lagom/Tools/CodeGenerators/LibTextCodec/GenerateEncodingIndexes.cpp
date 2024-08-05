@@ -267,7 +267,7 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
         .gb18030_ranges = data.get("gb18030-ranges"sv)->as_array(),
         .indexes = {
             { "gb18030"sv, move(gb18030_table) },
-            { "big5"sv, prepare_table(data.get("big5"sv)->as_array(), GenerateAccessor::Yes) },
+            { "big5"sv, prepare_table(data.get("big5"sv)->as_array(), GenerateAccessor::Yes, GenerateInverseAccessor::Yes) },
             { "jis0208"sv, prepare_table(data.get("jis0208"sv)->as_array(), GenerateAccessor::Yes, GenerateInverseAccessor::Yes) },
             { "jis0212"sv, prepare_table(data.get("jis0212"sv)->as_array(), GenerateAccessor::Yes) },
             { "euc_kr"sv, prepare_table(data.get("euc-kr"sv)->as_array(), GenerateAccessor::Yes, GenerateInverseAccessor::Yes) },
