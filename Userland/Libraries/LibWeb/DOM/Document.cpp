@@ -1034,7 +1034,7 @@ URL::URL Document::parse_url(StringView url) const
     auto base_url = this->base_url();
 
     // 2. Return the result of applying the URL parser to url, with baseURL.
-    return DOMURL::parse(url, base_url);
+    return DOMURL::parse(url, base_url, m_encoding.map([](auto&& x) { return StringView(x); }));
 }
 
 void Document::set_needs_layout()
