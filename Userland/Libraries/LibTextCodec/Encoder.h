@@ -29,6 +29,20 @@ public:
     virtual ErrorOr<void> process(Utf8View, Function<ErrorOr<void>(u8)> on_byte) override;
 };
 
+class ISO2022JPEncoder final : public Encoder {
+public:
+    virtual ErrorOr<void> process(Utf8View, Function<ErrorOr<void>(u8)> on_byte) override;
+
+private:
+    enum class State {
+        ASCII,
+        Roman,
+        jis0208,
+    };
+
+    ErrorOr<State> process_item(u32 item, State, Function<ErrorOr<void>(u8)>& on_byte);
+};
+
 class ShiftJISEncoder final : public Encoder {
 public:
     virtual ErrorOr<void> process(Utf8View, Function<ErrorOr<void>(u8)> on_byte) override;
