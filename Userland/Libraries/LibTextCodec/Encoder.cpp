@@ -19,6 +19,7 @@ GB18030Encoder s_gb18030_encoder;
 GB18030Encoder s_gbk_encoder(GB18030Encoder::IsGBK::Yes);
 Big5Encoder s_big5_encoder;
 EUCJPEncoder s_euc_jp_encoder;
+ISO2022JPEncoder s_iso_2022_jp_encoder;
 ShiftJISEncoder s_shift_jis_encoder;
 EUCKREncoder s_euc_kr_encoder;
 }
@@ -31,6 +32,8 @@ Optional<Encoder&> encoder_for_exact_name(StringView encoding)
         return s_big5_encoder;
     if (encoding.equals_ignoring_ascii_case("euc-jp"sv))
         return s_euc_jp_encoder;
+    if (encoding.equals_ignoring_ascii_case("iso-2022-jp"sv))
+        return s_iso_2022_jp_encoder;
     if (encoding.equals_ignoring_ascii_case("shift_jis"sv))
         return s_shift_jis_encoder;
     if (encoding.equals_ignoring_ascii_case("euc-kr"sv))
@@ -154,6 +157,136 @@ ErrorOr<void> EUCJPEncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> 
         TRY(on_byte(static_cast<u8>(trail)));
     }
 
+    return {};
+}
+
+// https://encoding.spec.whatwg.org/#iso-2022-jp-encoder
+ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State state, Function<ErrorOr<void>(u8)>& on_byte)
+{
+    // 3. If ISO-2022-JP encoder state is ASCII or Roman, and code point is U+000E, U+000F, or U+001B, return error with U+FFFD.
+    if (state == State::ASCII || state == State::Roman) {
+        if (item == 0x000E || item == 0x000F || item == 0x001B) {
+            // TODO: Report error.
+            return state;
+        }
+    }
+
+    // 4. If ISO-2022-JP encoder state is ASCII and code point is an ASCII code point, return a byte whose value is code point.
+    if (state == State::ASCII && item < 0x0080) {
+        TRY(on_byte(static_cast<u8>(item)));
+        return state;
+    }
+
+    // 5. If ISO-2022-JP encoder state is Roman and code point is an ASCII code point, excluding U+005C and U+007E, or is U+00A5 or U+203E, then:
+    if (state == State::Roman && ((item < 0x0080 && item != 0x005C && item != 0x007E) || (item == 0x00A5 || item == 0x203E))) {
+        // 1. If code point is an ASCII code point, return a byte whose value is code point.
+        if (item < 0x0080) {
+            TRY(on_byte(static_cast<u8>(item)));
+            return state;
+        }
+
+        // 2. If code point is U+00A5, return byte 0x5C.
+        if (item == 0x00A5) {
+            TRY(on_byte(0x5C));
+            return state;
+        }
+
+        // 3. If code point is U+203E, return byte 0x7E.
+        if (item == 0x203E) {
+            TRY(on_byte(0x7E));
+            return state;
+        }
+    }
+
+    // 6. If code point is an ASCII code point, and ISO-2022-JP encoder state is not ASCII, restore code point to ioQueue, set
+    //    ISO-2022-JP encoder state to ASCII, and return three bytes 0x1B 0x28 0x42.
+    if (item < 0x0080 && state != State::ASCII) {
+        TRY(on_byte(0x1B));
+        TRY(on_byte(0x28));
+        TRY(on_byte(0x42));
+        return process_item(item, State::ASCII, on_byte);
+    }
+
+    // 7. If code point is either U+00A5 or U+203E, and ISO-2022-JP encoder state is not Roman, restore code point to ioQueue,
+    //    set ISO-2022-JP encoder state to Roman, and return three bytes 0x1B 0x28 0x4A.
+    if ((item == 0x00A5 || item == 0x203E) && state != State::Roman) {
+        TRY(on_byte(0x1B));
+        TRY(on_byte(0x28));
+        TRY(on_byte(0x4A));
+        return process_item(item, State::Roman, on_byte);
+    }
+
+    // 8. If code point is U+2212, set it to U+FF0D.
+    if (item == 0x2212)
+        item = 0xFF0D;
+
+    // 9. If code point is in the range U+FF61 to U+FF9F, inclusive, set it to the index code point for code point − 0xFF61
+    //    in index ISO-2022-JP katakana.
+    if (item >= 0xFF61 && item <= 0xFF9F) {
+        item = *index_iso_2022_jp_katakana_code_point(item - 0xFF61);
+    }
+
+    // 10. Let pointer be the index pointer for code point in index jis0208.
+    auto pointer = code_point_jis0208_index(item);
+
+    // 11. If pointer is null, then:
+    if (!pointer.has_value()) {
+        // 1. If ISO-2022-JP encoder state is jis0208, then restore code point to ioQueue, set ISO-2022-JP encoder state to
+        //    ASCII, and return three bytes 0x1B 0x28 0x42.
+        if (state == State::jis0208) {
+            TRY(on_byte(0x1B));
+            TRY(on_byte(0x28));
+            TRY(on_byte(0x4A));
+            return process_item(item, State::ASCII, on_byte);
+        }
+
+        // 2. Return error with code point.
+        // TODO: Report error.
+        return state;
+    }
+
+    // 12. If ISO-2022-JP encoder state is not jis0208, restore code point to ioQueue, set ISO-2022-JP encoder state to
+    //     jis0208, and return three bytes 0x1B 0x24 0x42.
+    if (state != State::jis0208) {
+        TRY(on_byte(0x1B));
+        TRY(on_byte(0x24));
+        TRY(on_byte(0x42));
+        return process_item(item, State::jis0208, on_byte);
+    }
+
+    // 13. Let lead be pointer / 94 + 0x21.
+    auto lead = *pointer / 94 + 0x21;
+
+    // 14. Let trail be pointer % 94 + 0x21.
+    auto trail = *pointer % 94 + 0x21;
+
+    // 15. Return two bytes whose values are lead and trail.
+    TRY(on_byte(static_cast<u8>(lead)));
+    TRY(on_byte(static_cast<u8>(trail)));
+    return state;
+}
+
+// https://encoding.spec.whatwg.org/#iso-2022-jp-encoder
+ErrorOr<void> ISO2022JPEncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+{
+    // ISO-2022-JP’s encoder has an associated ISO-2022-JP encoder state which is ASCII, Roman, or jis0208 (initially ASCII).
+    auto state = State::ASCII;
+
+    for (u32 item : input) {
+        state = TRY(process_item(item, state, on_byte));
+    }
+
+    // 1. If code point is end-of-queue and ISO-2022-JP encoder state is not ASCII, set ISO-2022-JP
+    //    encoder state to ASCII, and return three bytes 0x1B 0x28 0x42.
+    if (state != State::ASCII) {
+        state = State::ASCII;
+        TRY(on_byte(0x1B));
+        TRY(on_byte(0x28));
+        TRY(on_byte(0x42));
+        return {};
+    }
+
+    // 2. If code point is end-of-queue and ISO-2022-JP encoder state is ASCII, return finished.
     return {};
 }
 

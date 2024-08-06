@@ -44,6 +44,35 @@ TEST_CASE(test_euc_jp_encoder)
     EXPECT(processed_bytes[4] == 0xC4);
 }
 
+TEST_CASE(test_iso_2022_jp_encoder)
+{
+    TextCodec::ISO2022JPEncoder encoder;
+    // U+A5 Yen Sign
+    // U+3088 Hiragana Letter Yo
+    // U+30C4 Katakana Letter Tu
+    auto test_string = "\U000000A5\U00003088\U000030C4"sv;
+
+    Vector<u8> processed_bytes;
+    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+        return processed_bytes.try_append(byte);
+    }));
+    EXPECT(processed_bytes.size() == 14);
+    EXPECT(processed_bytes[0] == 0x1B);
+    EXPECT(processed_bytes[1] == 0x28);
+    EXPECT(processed_bytes[2] == 0x4A);
+    EXPECT(processed_bytes[3] == 0x5C);
+    EXPECT(processed_bytes[4] == 0x1B);
+    EXPECT(processed_bytes[5] == 0x24);
+    EXPECT(processed_bytes[6] == 0x42);
+    EXPECT(processed_bytes[7] == 0x24);
+    EXPECT(processed_bytes[8] == 0x68);
+    EXPECT(processed_bytes[9] == 0x25);
+    EXPECT(processed_bytes[10] == 0x44);
+    EXPECT(processed_bytes[11] == 0x1B);
+    EXPECT(processed_bytes[12] == 0x28);
+    EXPECT(processed_bytes[13] == 0x42);
+}
+
 TEST_CASE(test_shift_jis_encoder)
 {
     TextCodec::ShiftJISEncoder encoder;
