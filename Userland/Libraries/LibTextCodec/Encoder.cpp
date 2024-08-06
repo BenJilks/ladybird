@@ -53,14 +53,14 @@ Optional<Encoder&> encoder_for(StringView label)
 }
 
 // https://encoding.spec.whatwg.org/#utf-8-encoder
-ErrorOr<void> UTF8Encoder::process(Utf8View input, ErrorMode, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> UTF8Encoder::process(Utf8View input, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte)
 {
     for (auto item : input) {
         // 1. If code point is end-of-queue, return finished.
 
         // 2. If code point is an ASCII code point, return a byte whose value is code point.
         if (item < 0x0080) {
-            TRY(on_byte(item));
+            TRY(on_byte(item, AlwaysEscape::No));
             continue;
         }
 
@@ -79,7 +79,7 @@ ErrorOr<void> UTF8Encoder::process(Utf8View input, ErrorMode, Function<ErrorOr<v
         }
 
         // 4. Let bytes be a byte sequence whose first byte is (code point >> (6 × count)) + offset.
-        TRY(on_byte(static_cast<u8>((item >> (6 * count)) + offset)));
+        TRY(on_byte(static_cast<u8>((item >> (6 * count)) + offset), AlwaysEscape::No));
 
         // 5. While count is greater than 0:
         while (count > 0) {
@@ -87,7 +87,7 @@ ErrorOr<void> UTF8Encoder::process(Utf8View input, ErrorMode, Function<ErrorOr<v
             auto temp = item >> (6 * (count - 1));
 
             // 2. Append to bytes 0x80 | (temp & 0x3F).
-            TRY(on_byte(static_cast<u8>(0x80 | (temp & 0x3F))));
+            TRY(on_byte(static_cast<u8>(0x80 | (temp & 0x3F)), AlwaysEscape::No));
 
             // 3. Decrease count by one.
             count -= 1;
@@ -100,28 +100,28 @@ ErrorOr<void> UTF8Encoder::process(Utf8View input, ErrorMode, Function<ErrorOr<v
 }
 
 // https://encoding.spec.whatwg.org/#concept-encoding-process
-static ErrorOr<void> handle_error(Encoder::ErrorMode error_mode, u32 code_point, Function<ErrorOr<void>(u8)>& on_byte)
+static ErrorOr<void> handle_error(Encoder::ErrorMode error_mode, u32 code_point, Function<ErrorOr<void>(u8, Encoder::AlwaysEscape)>& on_byte)
 {
     // 7. Otherwise, if result is an error, switch on mode and run the associated steps:
     switch (error_mode) {
     case Encoder::ErrorMode::Replacement:
         // Push U+FFFD (�) to output.
-        TRY(on_byte(0xFF));
-        TRY(on_byte(0xFD));
+        TRY(on_byte(0xFF, Encoder::AlwaysEscape::Yes));
+        TRY(on_byte(0xFD, Encoder::AlwaysEscape::Yes));
         return {};
     case Encoder::ErrorMode::Html: {
         // Push 0x26 (&), 0x23 (#), followed by the shortest sequence of 0x30 (0) to 0x39 (9), inclusive, representing
         // result’s code point’s value in base ten, followed by 0x3B (;) to output.
-        TRY(on_byte(0x26));
-        TRY(on_byte(0x23));
+        TRY(on_byte(0x26, Encoder::AlwaysEscape::Yes));
+        TRY(on_byte(0x23, Encoder::AlwaysEscape::Yes));
 
         Vector<u8> digits;
         for (u32 next_digits = code_point; next_digits > 0; next_digits /= 10)
             digits.append(0x30 + (next_digits % 10));
         for (u8 digit : digits.in_reverse())
-            TRY(on_byte(digit));
+            TRY(on_byte(digit, Encoder::AlwaysEscape::No));
 
-        TRY(on_byte(0x3B));
+        TRY(on_byte(0x3B, Encoder::AlwaysEscape::Yes));
         return {};
     }
     case Encoder::ErrorMode::Fatal:
@@ -133,33 +133,33 @@ static ErrorOr<void> handle_error(Encoder::ErrorMode error_mode, u32 code_point,
 }
 
 // https://encoding.spec.whatwg.org/#euc-jp-encoder
-ErrorOr<void> EUCJPEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> EUCJPEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte)
 {
     for (auto item : input) {
         // 1. If code point is end-of-queue, return finished.
 
         // 2. If code point is an ASCII code point, return a byte whose value is code point.
         if (item < 0x0080) {
-            TRY(on_byte(static_cast<u8>(item)));
+            TRY(on_byte(static_cast<u8>(item), AlwaysEscape::No));
             continue;
         }
 
         // 3. If code point is U+00A5, return byte 0x5C.
         if (item == 0x00A5) {
-            TRY(on_byte(static_cast<u8>(0x5C)));
+            TRY(on_byte(static_cast<u8>(0x5C), AlwaysEscape::No));
             continue;
         }
 
         // 4. If code point is U+203E, return byte 0x7E.
         if (item == 0x203E) {
-            TRY(on_byte(static_cast<u8>(0x7E)));
+            TRY(on_byte(static_cast<u8>(0x7E), AlwaysEscape::No));
             continue;
         }
 
         // 5. If code point is in the range U+FF61 to U+FF9F, inclusive, return two bytes whose values are 0x8E and code point − 0xFF61 + 0xA1.
         if (item >= 0xFF61 && item <= 0xFF9F) {
-            TRY(on_byte(0x8E));
-            TRY(on_byte(static_cast<u8>(item - 0xFF61 + 0xA1)));
+            TRY(on_byte(0x8E, AlwaysEscape::No));
+            TRY(on_byte(static_cast<u8>(item - 0xFF61 + 0xA1), AlwaysEscape::No));
             continue;
         }
 
@@ -183,15 +183,15 @@ ErrorOr<void> EUCJPEncoder::process(Utf8View input, ErrorMode error_mode, Functi
         auto trail = *pointer % 94 + 0xA1;
 
         // 11. Return two bytes whose values are lead and trail.
-        TRY(on_byte(static_cast<u8>(lead)));
-        TRY(on_byte(static_cast<u8>(trail)));
+        TRY(on_byte(static_cast<u8>(lead), AlwaysEscape::No));
+        TRY(on_byte(static_cast<u8>(trail), AlwaysEscape::No));
     }
 
     return {};
 }
 
 // https://encoding.spec.whatwg.org/#iso-2022-jp-encoder
-ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State state, ErrorMode error_mode, Function<ErrorOr<void>(u8)>& on_byte)
+ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State state, ErrorMode error_mode, Function<ErrorOr<void>(u8, AlwaysEscape)>& on_byte)
 {
     // 3. If ISO-2022-JP encoder state is ASCII or Roman, and code point is U+000E, U+000F, or U+001B, return error with U+FFFD.
     if (state == State::ASCII || state == State::Roman) {
@@ -203,7 +203,7 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
 
     // 4. If ISO-2022-JP encoder state is ASCII and code point is an ASCII code point, return a byte whose value is code point.
     if (state == State::ASCII && item < 0x0080) {
-        TRY(on_byte(static_cast<u8>(item)));
+        TRY(on_byte(static_cast<u8>(item), AlwaysEscape::No));
         return state;
     }
 
@@ -211,19 +211,19 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
     if (state == State::Roman && ((item < 0x0080 && item != 0x005C && item != 0x007E) || (item == 0x00A5 || item == 0x203E))) {
         // 1. If code point is an ASCII code point, return a byte whose value is code point.
         if (item < 0x0080) {
-            TRY(on_byte(static_cast<u8>(item)));
+            TRY(on_byte(static_cast<u8>(item), AlwaysEscape::No));
             return state;
         }
 
         // 2. If code point is U+00A5, return byte 0x5C.
         if (item == 0x00A5) {
-            TRY(on_byte(0x5C));
+            TRY(on_byte(0x5C, AlwaysEscape::No));
             return state;
         }
 
         // 3. If code point is U+203E, return byte 0x7E.
         if (item == 0x203E) {
-            TRY(on_byte(0x7E));
+            TRY(on_byte(0x7E, AlwaysEscape::No));
             return state;
         }
     }
@@ -231,18 +231,18 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
     // 6. If code point is an ASCII code point, and ISO-2022-JP encoder state is not ASCII, restore code point to ioQueue, set
     //    ISO-2022-JP encoder state to ASCII, and return three bytes 0x1B 0x28 0x42.
     if (item < 0x0080 && state != State::ASCII) {
-        TRY(on_byte(0x1B));
-        TRY(on_byte(0x28));
-        TRY(on_byte(0x42));
+        TRY(on_byte(0x1B, AlwaysEscape::No));
+        TRY(on_byte(0x28, AlwaysEscape::No));
+        TRY(on_byte(0x42, AlwaysEscape::No));
         return process_item(item, State::ASCII, error_mode, on_byte);
     }
 
     // 7. If code point is either U+00A5 or U+203E, and ISO-2022-JP encoder state is not Roman, restore code point to ioQueue,
     //    set ISO-2022-JP encoder state to Roman, and return three bytes 0x1B 0x28 0x4A.
     if ((item == 0x00A5 || item == 0x203E) && state != State::Roman) {
-        TRY(on_byte(0x1B));
-        TRY(on_byte(0x28));
-        TRY(on_byte(0x4A));
+        TRY(on_byte(0x1B, AlwaysEscape::No));
+        TRY(on_byte(0x28, AlwaysEscape::No));
+        TRY(on_byte(0x4A, AlwaysEscape::No));
         return process_item(item, State::Roman, error_mode, on_byte);
     }
 
@@ -264,9 +264,9 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
         // 1. If ISO-2022-JP encoder state is jis0208, then restore code point to ioQueue, set ISO-2022-JP encoder state to
         //    ASCII, and return three bytes 0x1B 0x28 0x42.
         if (state == State::jis0208) {
-            TRY(on_byte(0x1B));
-            TRY(on_byte(0x28));
-            TRY(on_byte(0x4A));
+            TRY(on_byte(0x1B, AlwaysEscape::No));
+            TRY(on_byte(0x28, AlwaysEscape::No));
+            TRY(on_byte(0x4A, AlwaysEscape::No));
             return process_item(item, State::ASCII, error_mode, on_byte);
         }
 
@@ -278,9 +278,9 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
     // 12. If ISO-2022-JP encoder state is not jis0208, restore code point to ioQueue, set ISO-2022-JP encoder state to
     //     jis0208, and return three bytes 0x1B 0x24 0x42.
     if (state != State::jis0208) {
-        TRY(on_byte(0x1B));
-        TRY(on_byte(0x24));
-        TRY(on_byte(0x42));
+        TRY(on_byte(0x1B, AlwaysEscape::No));
+        TRY(on_byte(0x24, AlwaysEscape::No));
+        TRY(on_byte(0x42, AlwaysEscape::No));
         return process_item(item, State::jis0208, error_mode, on_byte);
     }
 
@@ -291,13 +291,13 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
     auto trail = *pointer % 94 + 0x21;
 
     // 15. Return two bytes whose values are lead and trail.
-    TRY(on_byte(static_cast<u8>(lead)));
-    TRY(on_byte(static_cast<u8>(trail)));
+    TRY(on_byte(static_cast<u8>(lead), AlwaysEscape::No));
+    TRY(on_byte(static_cast<u8>(trail), AlwaysEscape::No));
     return state;
 }
 
 // https://encoding.spec.whatwg.org/#iso-2022-jp-encoder
-ErrorOr<void> ISO2022JPEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> ISO2022JPEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte)
 {
     // ISO-2022-JP’s encoder has an associated ISO-2022-JP encoder state which is ASCII, Roman, or jis0208 (initially ASCII).
     auto state = State::ASCII;
@@ -310,9 +310,9 @@ ErrorOr<void> ISO2022JPEncoder::process(Utf8View input, ErrorMode error_mode, Fu
     //    encoder state to ASCII, and return three bytes 0x1B 0x28 0x42.
     if (state != State::ASCII) {
         state = State::ASCII;
-        TRY(on_byte(0x1B));
-        TRY(on_byte(0x28));
-        TRY(on_byte(0x42));
+        TRY(on_byte(0x1B, AlwaysEscape::No));
+        TRY(on_byte(0x28, AlwaysEscape::No));
+        TRY(on_byte(0x42, AlwaysEscape::No));
         return {};
     }
 
@@ -335,32 +335,32 @@ static Optional<u32> index_shift_jis_pointer(u32 code_point)
 }
 
 // https://encoding.spec.whatwg.org/#shift_jis-encoder
-ErrorOr<void> ShiftJISEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> ShiftJISEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte)
 {
     for (u32 item : input) {
         // 1. If code point is end-of-queue, return finished.
 
         // 2. If code point is an ASCII code point or U+0080, return a byte whose value is code point.
         if (item <= 0x0080) {
-            TRY(on_byte(static_cast<u8>(item)));
+            TRY(on_byte(static_cast<u8>(item), AlwaysEscape::No));
             continue;
         }
 
         // 3. If code point is U+00A5, return byte 0x5C.
         if (item == 0x00A5) {
-            TRY(on_byte(0x5C));
+            TRY(on_byte(0x5C, AlwaysEscape::No));
             continue;
         }
 
         // 4. If code point is U+203E, return byte 0x7E.
         if (item == 0x203E) {
-            TRY(on_byte(0x7E));
+            TRY(on_byte(0x7E, AlwaysEscape::No));
             continue;
         }
 
         // 5. If code point is in the range U+FF61 to U+FF9F, inclusive, return a byte whose value is code point − 0xFF61 + 0xA1.
         if (item >= 0xFF61 && item <= 0xFF9F) {
-            TRY(on_byte(static_cast<u8>(item - 0xFF61 + 0xA1)));
+            TRY(on_byte(static_cast<u8>(item - 0xFF61 + 0xA1), AlwaysEscape::No));
             continue;
         }
 
@@ -394,22 +394,22 @@ ErrorOr<void> ShiftJISEncoder::process(Utf8View input, ErrorMode error_mode, Fun
             offset = 0x40;
 
         // 13. Return two bytes whose values are lead + lead offset and trail + offset.
-        TRY(on_byte(static_cast<u8>(lead + lead_offset)));
-        TRY(on_byte(static_cast<u8>(trail + offset)));
+        TRY(on_byte(static_cast<u8>(lead + lead_offset), AlwaysEscape::No));
+        TRY(on_byte(static_cast<u8>(trail + offset), AlwaysEscape::No));
     }
 
     return {};
 }
 
 // https://encoding.spec.whatwg.org/#euc-kr-encoder
-ErrorOr<void> EUCKREncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> EUCKREncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte)
 {
     for (u32 item : input) {
         // 1. If code point is end-of-queue, return finished.
 
         // 2. If code point is an ASCII code point, return a byte whose value is code point.
         if (item < 0x0080) {
-            TRY(on_byte(static_cast<u8>(item)));
+            TRY(on_byte(static_cast<u8>(item), AlwaysEscape::No));
             continue;
         }
 
@@ -429,22 +429,22 @@ ErrorOr<void> EUCKREncoder::process(Utf8View input, ErrorMode error_mode, Functi
         auto trail = *pointer % 190 + 0x41;
 
         // 7. Return two bytes whose values are lead and trail.
-        TRY(on_byte(static_cast<u8>(lead)));
-        TRY(on_byte(static_cast<u8>(trail)));
+        TRY(on_byte(static_cast<u8>(lead), AlwaysEscape::No));
+        TRY(on_byte(static_cast<u8>(trail), AlwaysEscape::No));
     }
 
     return {};
 }
 
 // https://encoding.spec.whatwg.org/#big5-encoder
-ErrorOr<void> Big5Encoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> Big5Encoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte)
 {
     for (u32 item : input) {
         // 1. If code point is end-of-queue, return finished.
 
         // 2. If code point is an ASCII code point, return a byte whose value is code point.
         if (item < 0x0080) {
-            TRY(on_byte(static_cast<u8>(item)));
+            TRY(on_byte(static_cast<u8>(item), AlwaysEscape::No));
             continue;
         }
 
@@ -469,8 +469,8 @@ ErrorOr<void> Big5Encoder::process(Utf8View input, ErrorMode error_mode, Functio
             offset = 0x40;
 
         // 8. Return two bytes whose values are lead and trail + offset.
-        TRY(on_byte(static_cast<u8>(lead)));
-        TRY(on_byte(static_cast<u8>(trail + offset)));
+        TRY(on_byte(static_cast<u8>(lead), AlwaysEscape::No));
+        TRY(on_byte(static_cast<u8>(trail + offset), AlwaysEscape::No));
     }
 
     return {};
@@ -502,7 +502,7 @@ GB18030Encoder::GB18030Encoder(IsGBK is_gbk)
 }
 
 // https://encoding.spec.whatwg.org/#gb18030-encoder
-ErrorOr<void> GB18030Encoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> GB18030Encoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte)
 {
     bool gbk = (m_is_gbk == IsGBK::Yes);
 
@@ -511,7 +511,7 @@ ErrorOr<void> GB18030Encoder::process(Utf8View input, ErrorMode error_mode, Func
 
         // 2. If code point is an ASCII code point, return a byte whose value is code point.
         if (item < 0x0080) {
-            TRY(on_byte(static_cast<u8>(item)));
+            TRY(on_byte(static_cast<u8>(item), AlwaysEscape::No));
             continue;
         }
 
@@ -523,7 +523,7 @@ ErrorOr<void> GB18030Encoder::process(Utf8View input, ErrorMode error_mode, Func
 
         // 4. If is GBK is true and code point is U+20AC, return byte 0x80.
         if (gbk && item == 0x20AC) {
-            TRY(on_byte(0x80));
+            TRY(on_byte(0x80, AlwaysEscape::No));
             continue;
         }
 
@@ -544,8 +544,8 @@ ErrorOr<void> GB18030Encoder::process(Utf8View input, ErrorMode error_mode, Func
                 offset = 0x40;
 
             // 4. Return two bytes whose values are lead and trail + offset.
-            TRY(on_byte(static_cast<u8>(lead)));
-            TRY(on_byte(static_cast<u8>(trail + offset)));
+            TRY(on_byte(static_cast<u8>(lead), AlwaysEscape::No));
+            TRY(on_byte(static_cast<u8>(trail + offset), AlwaysEscape::No));
             continue;
         }
 
@@ -577,10 +577,10 @@ ErrorOr<void> GB18030Encoder::process(Utf8View input, ErrorMode error_mode, Func
         auto byte4 = *pointer % 10;
 
         // 15. Return four bytes whose values are byte1 + 0x81, byte2 + 0x30, byte3 + 0x81, byte4 + 0x30.
-        TRY(on_byte(static_cast<u8>(byte1 + 0x81)));
-        TRY(on_byte(static_cast<u8>(byte2 + 0x30)));
-        TRY(on_byte(static_cast<u8>(byte3 + 0x81)));
-        TRY(on_byte(static_cast<u8>(byte4 + 0x30)));
+        TRY(on_byte(static_cast<u8>(byte1 + 0x81), AlwaysEscape::No));
+        TRY(on_byte(static_cast<u8>(byte2 + 0x30), AlwaysEscape::No));
+        TRY(on_byte(static_cast<u8>(byte3 + 0x81), AlwaysEscape::No));
+        TRY(on_byte(static_cast<u8>(byte4 + 0x30), AlwaysEscape::No));
     }
 
     return {};

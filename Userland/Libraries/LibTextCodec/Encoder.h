@@ -19,7 +19,12 @@ public:
         Fatal,
     };
 
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) = 0;
+    enum class AlwaysEscape {
+        Yes,
+        No,
+    };
+
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) = 0;
 
 protected:
     virtual ~Encoder() = default;
@@ -27,17 +32,17 @@ protected:
 
 class UTF8Encoder final : public Encoder {
 public:
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) override;
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) override;
 };
 
 class EUCJPEncoder final : public Encoder {
 public:
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) override;
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) override;
 };
 
 class ISO2022JPEncoder final : public Encoder {
 public:
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) override;
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) override;
 
 private:
     enum class State {
@@ -46,22 +51,22 @@ private:
         jis0208,
     };
 
-    ErrorOr<State> process_item(u32 item, State, ErrorMode, Function<ErrorOr<void>(u8)>& on_byte);
+    ErrorOr<State> process_item(u32 item, State, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)>& on_byte);
 };
 
 class ShiftJISEncoder final : public Encoder {
 public:
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) override;
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) override;
 };
 
 class EUCKREncoder final : public Encoder {
 public:
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) override;
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) override;
 };
 
 class Big5Encoder final : public Encoder {
 public:
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) override;
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) override;
 };
 
 class GB18030Encoder final : public Encoder {
@@ -73,7 +78,7 @@ public:
 
     GB18030Encoder(IsGBK is_gbk = IsGBK::No);
 
-    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8)> on_byte) override;
+    virtual ErrorOr<void> process(Utf8View, ErrorMode, Function<ErrorOr<void>(u8, AlwaysEscape)> on_byte) override;
 
 private:
     IsGBK m_is_gbk { IsGBK::No };
