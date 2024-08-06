@@ -762,7 +762,7 @@ ErrorOr<String> Parser::percent_encode_after_encoding(TextCodec::Encoder& encode
     StringBuilder output;
 
     // 3. For each byte of encodeOutput converted to a byte sequence:
-    TRY(encoder.process(Utf8View(input), [&](u8 byte) -> ErrorOr<void> {
+    auto on_byte = [&](u8 byte) -> ErrorOr<void> {
         // 1. If spaceAsPlus is true and byte is 0x20 (SP), then append U+002B (+) to output and continue.
         if (space_as_plus && byte == ' ') {
             output.append('+');
@@ -785,7 +785,16 @@ ErrorOr<String> Parser::percent_encode_after_encoding(TextCodec::Encoder& encode
         }
 
         return {};
-    }));
+    };
+
+    // 4. If potentialError is non-null, then append "%26%23", followed by the shortest sequence of ASCII digits
+    //    representing potentialError in base ten, followed by "%3B", to output.
+    auto on_error = [&](u32 error) -> ErrorOr<void> {
+        output.appendff("%26%23{}%3B", error);
+        return {};
+    };
+
+    TRY(encoder.process(Utf8View(input), move(on_byte), move(on_error)));
 
     // 6. Return output.
     return output.to_string();
