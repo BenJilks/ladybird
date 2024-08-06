@@ -764,7 +764,7 @@ ErrorOr<String> Parser::percent_encode_after_encoding(TextCodec::Encoder& encode
     StringBuilder output;
 
     // 3. For each byte of encodeOutput converted to a byte sequence:
-    TRY(encoder.process(Utf8View(input), [&](u8 byte) -> ErrorOr<void> {
+    TRY(encoder.process(Utf8View(input), TextCodec::Encoder::ErrorMode::Html, [&](u8 byte) -> ErrorOr<void> {
         // 1. If spaceAsPlus is true and byte is 0x20 (SP), then append U+002B (+) to output and continue.
         if (space_as_plus && byte == ' ') {
             output.append('+');

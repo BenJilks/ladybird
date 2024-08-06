@@ -53,7 +53,7 @@ Optional<Encoder&> encoder_for(StringView label)
 }
 
 // https://encoding.spec.whatwg.org/#utf-8-encoder
-ErrorOr<void> UTF8Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> UTF8Encoder::process(Utf8View input, ErrorMode, Function<ErrorOr<void>(u8)> on_byte)
 {
     for (auto item : input) {
         // 1. If code point is end-of-queue, return finished.
@@ -76,9 +76,6 @@ ErrorOr<void> UTF8Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)> o
         } else if (item >= 0x10000 && item <= 0x10FFFF) {
             count = 3;
             offset = 0xF0;
-        } else {
-            // TODO: Report error.
-            continue;
         }
 
         // 4. Let bytes be a byte sequence whose first byte is (code point >> (6 × count)) + offset.
@@ -102,8 +99,41 @@ ErrorOr<void> UTF8Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)> o
     return {};
 }
 
+// https://encoding.spec.whatwg.org/#concept-encoding-process
+static ErrorOr<void> handle_error(Encoder::ErrorMode error_mode, u32 code_point, Function<ErrorOr<void>(u8)>& on_byte)
+{
+    // 7. Otherwise, if result is an error, switch on mode and run the associated steps:
+    switch (error_mode) {
+    case Encoder::ErrorMode::Replacement:
+        // Push U+FFFD (�) to output.
+        TRY(on_byte(0xFF));
+        TRY(on_byte(0xFD));
+        return {};
+    case Encoder::ErrorMode::Html: {
+        // Push 0x26 (&), 0x23 (#), followed by the shortest sequence of 0x30 (0) to 0x39 (9), inclusive, representing
+        // result’s code point’s value in base ten, followed by 0x3B (;) to output.
+        TRY(on_byte(0x26));
+        TRY(on_byte(0x23));
+
+        Vector<u8> digits;
+        for (u32 next_digits = code_point; next_digits > 0; next_digits /= 10)
+            digits.append(0x30 + (next_digits % 10));
+        for (u8 digit : digits.in_reverse())
+            TRY(on_byte(digit));
+
+        TRY(on_byte(0x3B));
+        return {};
+    }
+    case Encoder::ErrorMode::Fatal:
+        // Return result.
+        return Error::from_string_view("Fatal encoding error"sv);
+    }
+
+    return {};
+}
+
 // https://encoding.spec.whatwg.org/#euc-jp-encoder
-ErrorOr<void> EUCJPEncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> EUCJPEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
 {
     for (auto item : input) {
         // 1. If code point is end-of-queue, return finished.
@@ -142,7 +172,7 @@ ErrorOr<void> EUCJPEncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> 
 
         // 8. If pointer is null, return error with code point.
         if (!pointer.has_value()) {
-            // TODO: Report error.
+            TRY(handle_error(error_mode, item, on_byte));
             continue;
         }
 
@@ -161,12 +191,12 @@ ErrorOr<void> EUCJPEncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> 
 }
 
 // https://encoding.spec.whatwg.org/#iso-2022-jp-encoder
-ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State state, Function<ErrorOr<void>(u8)>& on_byte)
+ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State state, ErrorMode error_mode, Function<ErrorOr<void>(u8)>& on_byte)
 {
     // 3. If ISO-2022-JP encoder state is ASCII or Roman, and code point is U+000E, U+000F, or U+001B, return error with U+FFFD.
     if (state == State::ASCII || state == State::Roman) {
         if (item == 0x000E || item == 0x000F || item == 0x001B) {
-            // TODO: Report error.
+            TRY(handle_error(error_mode, 0xFFFD, on_byte));
             return state;
         }
     }
@@ -204,7 +234,7 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
         TRY(on_byte(0x1B));
         TRY(on_byte(0x28));
         TRY(on_byte(0x42));
-        return process_item(item, State::ASCII, on_byte);
+        return process_item(item, State::ASCII, error_mode, on_byte);
     }
 
     // 7. If code point is either U+00A5 or U+203E, and ISO-2022-JP encoder state is not Roman, restore code point to ioQueue,
@@ -213,7 +243,7 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
         TRY(on_byte(0x1B));
         TRY(on_byte(0x28));
         TRY(on_byte(0x4A));
-        return process_item(item, State::Roman, on_byte);
+        return process_item(item, State::Roman, error_mode, on_byte);
     }
 
     // 8. If code point is U+2212, set it to U+FF0D.
@@ -237,11 +267,11 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
             TRY(on_byte(0x1B));
             TRY(on_byte(0x28));
             TRY(on_byte(0x4A));
-            return process_item(item, State::ASCII, on_byte);
+            return process_item(item, State::ASCII, error_mode, on_byte);
         }
 
         // 2. Return error with code point.
-        // TODO: Report error.
+        TRY(handle_error(error_mode, item, on_byte));
         return state;
     }
 
@@ -251,7 +281,7 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
         TRY(on_byte(0x1B));
         TRY(on_byte(0x24));
         TRY(on_byte(0x42));
-        return process_item(item, State::jis0208, on_byte);
+        return process_item(item, State::jis0208, error_mode, on_byte);
     }
 
     // 13. Let lead be pointer / 94 + 0x21.
@@ -267,13 +297,13 @@ ErrorOr<ISO2022JPEncoder::State> ISO2022JPEncoder::process_item(u32 item, State 
 }
 
 // https://encoding.spec.whatwg.org/#iso-2022-jp-encoder
-ErrorOr<void> ISO2022JPEncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> ISO2022JPEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
 {
     // ISO-2022-JP’s encoder has an associated ISO-2022-JP encoder state which is ASCII, Roman, or jis0208 (initially ASCII).
     auto state = State::ASCII;
 
     for (u32 item : input) {
-        state = TRY(process_item(item, state, on_byte));
+        state = TRY(process_item(item, state, error_mode, on_byte));
     }
 
     // 1. If code point is end-of-queue and ISO-2022-JP encoder state is not ASCII, set ISO-2022-JP
@@ -305,7 +335,7 @@ static Optional<u32> index_shift_jis_pointer(u32 code_point)
 }
 
 // https://encoding.spec.whatwg.org/#shift_jis-encoder
-ErrorOr<void> ShiftJISEncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> ShiftJISEncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
 {
     for (u32 item : input) {
         // 1. If code point is end-of-queue, return finished.
@@ -343,7 +373,7 @@ ErrorOr<void> ShiftJISEncoder::process(Utf8View input, Function<ErrorOr<void>(u8
 
         // 8. If pointer is null, return error with code point.
         if (!pointer.has_value()) {
-            // TODO: Report error.
+            TRY(handle_error(error_mode, item, on_byte));
             continue;
         }
 
@@ -372,7 +402,7 @@ ErrorOr<void> ShiftJISEncoder::process(Utf8View input, Function<ErrorOr<void>(u8
 }
 
 // https://encoding.spec.whatwg.org/#euc-kr-encoder
-ErrorOr<void> EUCKREncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> EUCKREncoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
 {
     for (u32 item : input) {
         // 1. If code point is end-of-queue, return finished.
@@ -388,7 +418,7 @@ ErrorOr<void> EUCKREncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> 
 
         // 4. If pointer is null, return error with code point.
         if (!pointer.has_value()) {
-            // TODO: Report error.
+            TRY(handle_error(error_mode, item, on_byte));
             continue;
         }
 
@@ -407,7 +437,7 @@ ErrorOr<void> EUCKREncoder::process(Utf8View input, Function<ErrorOr<void>(u8)> 
 }
 
 // https://encoding.spec.whatwg.org/#big5-encoder
-ErrorOr<void> Big5Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> Big5Encoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
 {
     for (u32 item : input) {
         // 1. If code point is end-of-queue, return finished.
@@ -423,7 +453,7 @@ ErrorOr<void> Big5Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)> o
 
         // 4. If pointer is null, return error with code point.
         if (!pointer.has_value()) {
-            // TODO: Report error.
+            TRY(handle_error(error_mode, item, on_byte));
             continue;
         }
 
@@ -472,7 +502,7 @@ GB18030Encoder::GB18030Encoder(IsGBK is_gbk)
 }
 
 // https://encoding.spec.whatwg.org/#gb18030-encoder
-ErrorOr<void> GB18030Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)> on_byte)
+ErrorOr<void> GB18030Encoder::process(Utf8View input, ErrorMode error_mode, Function<ErrorOr<void>(u8)> on_byte)
 {
     bool gbk = (m_is_gbk == IsGBK::Yes);
 
@@ -487,7 +517,7 @@ ErrorOr<void> GB18030Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)
 
         // 3. If code point is U+E5E5, return error with code point.
         if (item == 0xE5E5) {
-            // TODO: Report error.
+            TRY(handle_error(error_mode, item, on_byte));
             continue;
         }
 
@@ -521,7 +551,7 @@ ErrorOr<void> GB18030Encoder::process(Utf8View input, Function<ErrorOr<void>(u8)
 
         // 7. If is GBK is true, return error with code point.
         if (gbk) {
-            // TODO: Report error.
+            TRY(handle_error(error_mode, item, on_byte));
             continue;
         }
 

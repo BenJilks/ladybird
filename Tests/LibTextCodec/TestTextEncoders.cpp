@@ -14,7 +14,7 @@ TEST_CASE(test_utf8_encode)
     auto test_string = "\U0001F600"sv;
 
     Vector<u8> processed_bytes;
-    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+    MUST(encoder.process(Utf8View(test_string), TextCodec::Encoder::ErrorMode::Fatal, [&](u8 byte) {
         return processed_bytes.try_append(byte);
     }));
     EXPECT(processed_bytes.size() == 4);
@@ -33,7 +33,7 @@ TEST_CASE(test_euc_jp_encoder)
     auto test_string = "\U000000A5\U00003088\U000030C4"sv;
 
     Vector<u8> processed_bytes;
-    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+    MUST(encoder.process(Utf8View(test_string), TextCodec::Encoder::ErrorMode::Fatal, [&](u8 byte) {
         return processed_bytes.try_append(byte);
     }));
     EXPECT(processed_bytes.size() == 5);
@@ -53,7 +53,7 @@ TEST_CASE(test_iso_2022_jp_encoder)
     auto test_string = "\U000000A5\U00003088\U000030C4"sv;
 
     Vector<u8> processed_bytes;
-    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+    MUST(encoder.process(Utf8View(test_string), TextCodec::Encoder::ErrorMode::Fatal, [&](u8 byte) {
         return processed_bytes.try_append(byte);
     }));
     EXPECT(processed_bytes.size() == 14);
@@ -82,7 +82,7 @@ TEST_CASE(test_shift_jis_encoder)
     auto test_string = "\U000000A5\U00003088\U000030C4"sv;
 
     Vector<u8> processed_bytes;
-    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+    MUST(encoder.process(Utf8View(test_string), TextCodec::Encoder::ErrorMode::Fatal, [&](u8 byte) {
         return processed_bytes.try_append(byte);
     }));
     EXPECT(processed_bytes.size() == 5);
@@ -101,7 +101,7 @@ TEST_CASE(test_euc_kr_encoder)
     auto test_string = "\U0000B29F\U00007C97"sv;
 
     Vector<u8> processed_bytes;
-    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+    MUST(encoder.process(Utf8View(test_string), TextCodec::Encoder::ErrorMode::Fatal, [&](u8 byte) {
         return processed_bytes.try_append(byte);
     }));
     EXPECT(processed_bytes.size() == 4);
@@ -119,7 +119,7 @@ TEST_CASE(test_big5_encoder)
     auto test_string = "\U000000A7\U000070D7"sv;
 
     Vector<u8> processed_bytes;
-    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+    MUST(encoder.process(Utf8View(test_string), TextCodec::Encoder::ErrorMode::Fatal, [&](u8 byte) {
         return processed_bytes.try_append(byte);
     }));
     EXPECT(processed_bytes.size() == 4);
@@ -137,7 +137,7 @@ TEST_CASE(test_gb18030_encoder)
     auto test_string = "\U000020AC\U0000E4C5"sv;
 
     Vector<u8> processed_bytes;
-    MUST(encoder.process(Utf8View(test_string), [&](u8 byte) {
+    MUST(encoder.process(Utf8View(test_string), TextCodec::Encoder::ErrorMode::Fatal, [&](u8 byte) {
         return processed_bytes.try_append(byte);
     }));
 
