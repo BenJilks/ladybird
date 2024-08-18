@@ -14,6 +14,40 @@
 
 namespace Gfx {
 
+bool GlyphRun::is_context_dependent(TextType text_type)
+{
+    switch (text_type) {
+    case TextType::Whitespace:
+    case TextType::Common:
+        return true;
+
+    case TextType::Neutral:
+    case TextType::EndPadding:
+    case TextType::Ltr:
+    case TextType::Rtl:
+        return false;
+    }
+
+    VERIFY_NOT_REACHED();
+}
+
+bool GlyphRun::is_direction_known(TextType text_type)
+{
+    switch (text_type) {
+    case TextType::Whitespace:
+    case TextType::EndPadding:
+    case TextType::Common:
+    case TextType::Neutral:
+        return false;
+
+    case TextType::Ltr:
+    case TextType::Rtl:
+        return true;
+    }
+
+    VERIFY_NOT_REACHED();
+}
+
 static DrawGlyphOrEmoji construct_glyph_or_emoji(size_t index, FloatPoint const& position, Gfx::Font const&, Span<hb_glyph_info_t const> glyph_info, Span<hb_glyph_info_t const>)
 {
     return DrawGlyph {
