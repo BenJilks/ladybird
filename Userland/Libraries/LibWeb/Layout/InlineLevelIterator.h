@@ -84,6 +84,7 @@ private:
         bool is_first_chunk {};
         bool is_last_chunk {};
         TextNode::ChunkIterator chunk_iterator;
+        Optional<TextNode::Chunk> last_chunk {};
         Optional<TextNode::Chunk> next_chunk {};
     };
 

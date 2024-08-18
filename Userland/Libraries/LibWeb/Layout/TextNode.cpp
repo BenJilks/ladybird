@@ -400,6 +400,47 @@ TextNode::ChunkIterator::ChunkIterator(StringView text, bool wrap_lines, bool re
 {
 }
 
+static Optional<Gfx::GlyphRun::TextType> text_type_for_code_point(u32 code_point)
+{
+    switch (Unicode::bidirectional_class(code_point)) {
+    case Unicode::BidiClass::BlockSeparator:
+    case Unicode::BidiClass::SegmentSeparator:
+    case Unicode::BidiClass::CommonNumberSeparator:
+        return {};
+
+    case Unicode::BidiClass::BoundaryNeutral:
+    case Unicode::BidiClass::OtherNeutral:
+    case Unicode::BidiClass::FirstStrongIsolate:
+    case Unicode::BidiClass::PopDirectionalFormat:
+    case Unicode::BidiClass::PopDirectionalIsolate:
+    case Unicode::BidiClass::DirNonSpacingMark:
+        return Gfx::GlyphRun::TextType::Common;
+
+    case Unicode::BidiClass::WhiteSpaceNeutral:
+        return Gfx::GlyphRun::TextType::Space;
+
+    case Unicode::BidiClass::LeftToRight:
+    case Unicode::BidiClass::LeftToRightEmbedding:
+    case Unicode::BidiClass::LeftToRightIsolate:
+    case Unicode::BidiClass::LeftToRightOverride:
+    case Unicode::BidiClass::ArabicNumber:
+    case Unicode::BidiClass::EuropeanNumber:
+    case Unicode::BidiClass::EuropeanNumberSeparator:
+    case Unicode::BidiClass::EuropeanNumberTerminator:
+        return Gfx::GlyphRun::TextType::Ltr;
+
+    case Unicode::BidiClass::RightToLeft:
+    case Unicode::BidiClass::RightToLeftArabic:
+    case Unicode::BidiClass::RightToLeftEmbedding:
+    case Unicode::BidiClass::RightToLeftIsolate:
+    case Unicode::BidiClass::RightToLeftOverride:
+        return Gfx::GlyphRun::TextType::Rtl;
+
+    default:
+        VERIFY_NOT_REACHED();
+    }
+}
+
 Optional<TextNode::Chunk> TextNode::ChunkIterator::next()
 {
     if (m_iterator == m_utf8_view.end())
@@ -408,35 +449,42 @@ Optional<TextNode::Chunk> TextNode::ChunkIterator::next()
     auto start_of_chunk = m_iterator;
 
     Gfx::Font const& font = m_font_cascade_list.font_for_code_point(*m_iterator);
+    auto text_type = text_type_for_code_point(*m_iterator).value_or(m_current_text_type);
     while (m_iterator != m_utf8_view.end()) {
         if (&font != &m_font_cascade_list.font_for_code_point(*m_iterator)) {
-            if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font); result.has_value())
+            if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font, text_type); result.has_value())
                 return result.release_value();
         }
 
         if (m_respect_linebreaks && *m_iterator == '\n') {
             // Newline encountered, and we're supposed to preserve them.
             // If we have accumulated some code points in the current chunk, commit them now and continue with the newline next time.
-            if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font); result.has_value())
+            if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font, text_type); result.has_value())
                 return result.release_value();
 
             // Otherwise, commit the newline!
             ++m_iterator;
-            auto result = try_commit_chunk(start_of_chunk, m_iterator, true, font);
+            auto result = try_commit_chunk(start_of_chunk, m_iterator, true, font, text_type);
             VERIFY(result.has_value());
             return result.release_value();
         }
 
         if (m_wrap_lines) {
+            m_current_text_type = text_type_for_code_point(*m_iterator).value_or(m_current_text_type);
+            if (text_type != m_current_text_type) {
+                if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font, text_type); result.has_value())
+                    return result.release_value();
+            }
+
             if (is_ascii_space(*m_iterator)) {
                 // Whitespace encountered, and we're allowed to break on whitespace.
                 // If we have accumulated some code points in the current chunk, commit them now and continue with the whitespace next time.
-                if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font); result.has_value())
+                if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font, text_type); result.has_value())
                     return result.release_value();
 
                 // Otherwise, commit the whitespace!
                 ++m_iterator;
-                if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font); result.has_value())
+                if (auto result = try_commit_chunk(start_of_chunk, m_iterator, false, font, text_type); result.has_value())
                     return result.release_value();
                 continue;
             }
@@ -447,14 +495,14 @@ Optional<TextNode::Chunk> TextNode::ChunkIterator::next()
 
     if (start_of_chunk != m_utf8_view.end()) {
         // Try to output whatever's left at the end of the text node.
-        if (auto result = try_commit_chunk(start_of_chunk, m_utf8_view.end(), false, font); result.has_value())
+        if (auto result = try_commit_chunk(start_of_chunk, m_utf8_view.end(), false, font, text_type); result.has_value())
             return result.release_value();
     }
 
     return {};
 }
 
-Optional<TextNode::Chunk> TextNode::ChunkIterator::try_commit_chunk(Utf8View::Iterator const& start, Utf8View::Iterator const& end, bool has_breaking_newline, Gfx::Font const& font) const
+Optional<TextNode::Chunk> TextNode::ChunkIterator::try_commit_chunk(Utf8View::Iterator const& start, Utf8View::Iterator const& end, bool has_breaking_newline, Gfx::Font const& font, Gfx::GlyphRun::TextType text_type) const
 {
     auto byte_offset = m_utf8_view.byte_offset_of(start);
     auto byte_length = m_utf8_view.byte_offset_of(end) - byte_offset;
@@ -468,6 +516,7 @@ Optional<TextNode::Chunk> TextNode::ChunkIterator::try_commit_chunk(Utf8View::It
             .length = byte_length,
             .has_breaking_newline = has_breaking_newline,
             .is_all_whitespace = is_all_whitespace(chunk_view.as_string()),
+            .text_type = text_type,
         };
     }
 

@@ -183,11 +183,36 @@ Optional<InlineLevelIterator::Item> InlineLevelIterator::next_without_lookahead(
             return next_without_lookahead();
         }
 
-        m_text_node_context->next_chunk = m_text_node_context->chunk_iterator.next();
-        if (!m_text_node_context->next_chunk.has_value())
-            m_text_node_context->is_last_chunk = true;
-
         auto& chunk = chunk_opt.value();
+        auto text_type = chunk.text_type;
+
+        m_text_node_context->next_chunk = m_text_node_context->chunk_iterator.next();
+        if (!m_text_node_context->next_chunk.has_value()) {
+            m_text_node_context->is_last_chunk = true;
+            if (chunk.is_all_whitespace)
+                text_type = Gfx::GlyphRun::TextType::EndPadding;
+        }
+
+        if (text_type == Gfx::GlyphRun::TextType::Space) {
+            // Determine direction of space from context.
+            text_type = [&]() {
+                auto last_text_type = m_text_node_context->last_chunk.map([](auto& chunk) { return chunk.text_type; });
+                auto next_text_type = m_text_node_context->next_chunk.map([](auto& chunk) { return chunk.text_type; });
+                if (last_text_type != next_text_type) {
+                    switch (m_containing_block->computed_values().direction()) {
+                    case CSS::Direction::Ltr:
+                        return Gfx::GlyphRun::TextType::Ltr;
+                    case CSS::Direction::Rtl:
+                        return Gfx::GlyphRun::TextType::Rtl;
+                    }
+                }
+                if (last_text_type.has_value())
+                    return *last_text_type;
+                if (next_text_type.has_value())
+                    return *next_text_type;
+                return text_type;
+            }();
+        }
 
         if (m_text_node_context->do_respect_linebreaks && chunk.has_breaking_newline) {
             return Item {
@@ -211,7 +236,7 @@ Optional<InlineLevelIterator::Item> InlineLevelIterator::next_without_lookahead(
         Item item {
             .type = Item::Type::Text,
             .node = &text_node,
-            .glyph_run = adopt_ref(*new Gfx::GlyphRun(move(glyph_run), chunk.font)),
+            .glyph_run = adopt_ref(*new Gfx::GlyphRun(move(glyph_run), chunk.font, text_type)),
             .offset_in_node = chunk.start,
             .length_in_node = chunk.length,
             .width = chunk_width,
@@ -219,6 +244,7 @@ Optional<InlineLevelIterator::Item> InlineLevelIterator::next_without_lookahead(
         };
 
         add_extra_box_model_metrics_to_item(item, m_text_node_context->is_first_chunk, m_text_node_context->is_last_chunk);
+        m_text_node_context->last_chunk = chunk_opt;
         return item;
     }
 
