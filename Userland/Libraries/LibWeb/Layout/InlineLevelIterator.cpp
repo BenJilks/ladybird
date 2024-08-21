@@ -165,6 +165,45 @@ CSSPixels InlineLevelIterator::next_non_whitespace_sequence_width()
     return next_width;
 }
 
+Gfx::GlyphRun::TextType InlineLevelIterator::resolve_text_direction_from_context() const
+{
+    VERIFY(m_text_node_context.has_value());
+
+    auto last_known_direction = [&]() -> Optional<Gfx::GlyphRun::TextType> {
+        for (int i = static_cast<int>(m_text_node_context->chunk_index) - 1; i >= 0; --i) {
+            auto text_type = m_text_node_context->chunks[i].text_type;
+            if (text_type == Gfx::GlyphRun::TextType::Ltr || text_type == Gfx::GlyphRun::TextType::Rtl)
+                return text_type;
+        }
+        return {};
+    }();
+
+    auto next_known_direction = [&]() -> Optional<Gfx::GlyphRun::TextType> {
+        for (size_t i = m_text_node_context->chunk_index + 1; i < m_text_node_context->chunks.size(); ++i) {
+            auto text_type = m_text_node_context->chunks[i].text_type;
+            if (text_type == Gfx::GlyphRun::TextType::Ltr || text_type == Gfx::GlyphRun::TextType::Rtl)
+                return text_type;
+        }
+        return {};
+    }();
+
+    if (last_known_direction.has_value() && next_known_direction.has_value() && *last_known_direction != *next_known_direction) {
+        switch (m_containing_block->computed_values().direction()) {
+        case CSS::Direction::Ltr:
+            return Gfx::GlyphRun::TextType::Ltr;
+        case CSS::Direction::Rtl:
+            return Gfx::GlyphRun::TextType::Rtl;
+        }
+    }
+
+    if (last_known_direction.has_value())
+        return *last_known_direction;
+    if (next_known_direction.has_value())
+        return *next_known_direction;
+
+    return Gfx::GlyphRun::TextType::ContextDependent;
+}
+
 Optional<InlineLevelIterator::Item> InlineLevelIterator::next_without_lookahead()
 {
     if (!m_current_node)
@@ -176,42 +215,41 @@ Optional<InlineLevelIterator::Item> InlineLevelIterator::next_without_lookahead(
         if (!m_text_node_context.has_value())
             enter_text_node(text_node);
 
-        auto chunk_opt = m_text_node_context->next_chunk;
-        if (!chunk_opt.has_value()) {
+        if (m_text_node_context->chunk_index >= m_text_node_context->chunks.size()) {
             m_text_node_context = {};
             skip_to_next();
             return next_without_lookahead();
         }
 
-        auto& chunk = chunk_opt.value();
+        auto& chunk = m_text_node_context->chunks[m_text_node_context->chunk_index];
         auto text_type = chunk.text_type;
 
-        m_text_node_context->next_chunk = m_text_node_context->chunk_iterator.next();
-        if (!m_text_node_context->next_chunk.has_value()) {
+        if (m_text_node_context->chunk_index + 1 == m_text_node_context->chunks.size()) {
             m_text_node_context->is_last_chunk = true;
             if (chunk.is_all_whitespace)
                 text_type = Gfx::GlyphRun::TextType::EndPadding;
         }
 
-        if (text_type == Gfx::GlyphRun::TextType::Space) {
-            // Determine direction of space from context.
-            text_type = [&]() {
-                auto last_text_type = m_text_node_context->last_chunk.map([](auto& chunk) { return chunk.text_type; });
-                auto next_text_type = m_text_node_context->next_chunk.map([](auto& chunk) { return chunk.text_type; });
-                if (last_text_type != next_text_type) {
-                    switch (m_containing_block->computed_values().direction()) {
-                    case CSS::Direction::Ltr:
-                        return Gfx::GlyphRun::TextType::Ltr;
-                    case CSS::Direction::Rtl:
-                        return Gfx::GlyphRun::TextType::Rtl;
-                    }
-                }
-                if (last_text_type.has_value())
-                    return *last_text_type;
-                if (next_text_type.has_value())
-                    return *next_text_type;
-                return text_type;
-            }();
+        if (text_type == Gfx::GlyphRun::TextType::ContextDependent)
+            text_type = resolve_text_direction_from_context();
+
+        dbg("{}: ", chunk.view);
+        switch (text_type) {
+        case Gfx::GlyphRun::TextType::Common:
+            dbgln("common");
+            break;
+        case Gfx::GlyphRun::TextType::EndPadding:
+            dbgln("end padding");
+            break;
+        case Gfx::GlyphRun::TextType::ContextDependent:
+            dbgln("context");
+            break;
+        case Gfx::GlyphRun::TextType::Ltr:
+            dbgln("ltr");
+            break;
+        case Gfx::GlyphRun::TextType::Rtl:
+            dbgln("rtl");
+            break;
         }
 
         if (m_text_node_context->do_respect_linebreaks && chunk.has_breaking_newline) {
@@ -244,7 +282,7 @@ Optional<InlineLevelIterator::Item> InlineLevelIterator::next_without_lookahead(
         };
 
         add_extra_box_model_metrics_to_item(item, m_text_node_context->is_first_chunk, m_text_node_context->is_last_chunk);
-        m_text_node_context->last_chunk = chunk_opt;
+        m_text_node_context->chunk_index += 1;
         return item;
     }
 
@@ -340,15 +378,25 @@ void InlineLevelIterator::enter_text_node(Layout::TextNode const& text_node)
     if (text_node.dom_node().is_editable() && !text_node.dom_node().is_uninteresting_whitespace_node())
         do_collapse = false;
 
+    TextNode::ChunkIterator chunk_iterator { text_node.text_for_rendering(), do_wrap_lines, do_respect_linebreaks, text_node.computed_values().font_list() };
+
+    Vector<TextNode::Chunk> chunks;
+    for (;;) {
+        auto chunk = chunk_iterator.next();
+        if (!chunk.has_value())
+            break;
+        chunks.append(*chunk);
+    }
+
     m_text_node_context = TextNodeContext {
         .do_collapse = do_collapse,
         .do_wrap_lines = do_wrap_lines,
         .do_respect_linebreaks = do_respect_linebreaks,
         .is_first_chunk = true,
         .is_last_chunk = false,
-        .chunk_iterator = TextNode::ChunkIterator { text_node.text_for_rendering(), do_wrap_lines, do_respect_linebreaks, text_node.computed_values().font_list() },
+        .chunks = move(chunks),
+        .chunk_index = 0,
     };
-    m_text_node_context->next_chunk = m_text_node_context->chunk_iterator.next();
 }
 
 void InlineLevelIterator::add_extra_box_model_metrics_to_item(Item& item, bool add_leading_metrics, bool add_trailing_metrics)

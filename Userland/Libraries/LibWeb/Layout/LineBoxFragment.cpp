@@ -21,10 +21,11 @@ LineBoxFragment::LineBoxFragment(Node const& layout_node, int start, int length,
     , m_border_box_top(border_box_top)
     , m_direction(direction)
     , m_glyph_run(move(glyph_run))
-    , m_insert_position(m_size.width())
 {
-    if (glyph_run) {
-        m_current_insert_direction = resolve_glyph_run_direction(glyph_run->text_type());
+    if (m_glyph_run) {
+        m_current_insert_direction = resolve_glyph_run_direction(m_glyph_run->text_type());
+        if (m_direction == CSS::Direction::Rtl)
+            m_insert_position = m_size.width().to_float();
     }
 }
 
@@ -65,7 +66,7 @@ CSS::Direction LineBoxFragment::resolve_glyph_run_direction(Gfx::GlyphRun::TextT
 {
     switch (text_type) {
     case Gfx::GlyphRun::TextType::Common:
-    case Gfx::GlyphRun::TextType::Space:
+    case Gfx::GlyphRun::TextType::ContextDependent:
     case Gfx::GlyphRun::TextType::EndPadding:
         return m_direction;
     case Gfx::GlyphRun::TextType::Ltr:

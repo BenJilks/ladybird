@@ -49,7 +49,6 @@ public:
         Utf8View m_utf8_view;
         Utf8View::Iterator m_iterator;
         Gfx::FontCascadeList const& m_font_cascade_list;
-        Gfx::GlyphRun::TextType m_current_text_type { Gfx::GlyphRun::TextType::Common };
     };
 
     void invalidate_text_for_rendering();

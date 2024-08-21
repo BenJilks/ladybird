@@ -46,7 +46,7 @@ class GlyphRun : public RefCounted<GlyphRun> {
 public:
     enum class TextType {
         Common,
-        Space,
+        ContextDependent,
         EndPadding,
         Ltr,
         Rtl,

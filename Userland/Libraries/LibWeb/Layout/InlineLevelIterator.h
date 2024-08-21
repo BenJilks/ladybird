@@ -57,6 +57,7 @@ public:
 
 private:
     Optional<Item> next_without_lookahead();
+    Gfx::GlyphRun::TextType resolve_text_direction_from_context() const;
     void skip_to_next();
     void compute_next();
 
@@ -83,9 +84,8 @@ private:
         bool do_respect_linebreaks {};
         bool is_first_chunk {};
         bool is_last_chunk {};
-        TextNode::ChunkIterator chunk_iterator;
-        Optional<TextNode::Chunk> last_chunk {};
-        Optional<TextNode::Chunk> next_chunk {};
+        Vector<TextNode::Chunk> chunks;
+        size_t chunk_index { 0 };
     };
 
     Optional<TextNodeContext> m_text_node_context;
