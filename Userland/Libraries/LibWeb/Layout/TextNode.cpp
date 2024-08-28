@@ -7,6 +7,7 @@
 
 #include <AK/CharacterTypes.h>
 #include <AK/StringBuilder.h>
+#include <LibUnicode/BiDi.h>
 #include <LibUnicode/CharacterTypes.h>
 #include <LibWeb/DOM/Document.h>
 #include <LibWeb/Layout/BlockContainer.h>
@@ -333,6 +334,24 @@ void TextNode::compute_text_for_rendering()
         collapse = false;
 
     auto data = apply_text_transform(dom_node().data(), computed_values().text_transform()).release_value_but_fixme_should_propagate_errors();
+
+    auto text_direction = [&]() {
+        switch (computed_values().direction()) {
+        case CSS::Direction::Ltr:
+            return Unicode::BiDiDirection::Ltr;
+        case CSS::Direction::Rtl:
+            return Unicode::BiDiDirection::Rtl;
+        default:
+            VERIFY_NOT_REACHED();
+        }
+    }();
+
+    auto reordered_data_or_error = Unicode::render_directional_paragraph(data, text_direction);
+    if (!reordered_data_or_error.is_error()) {
+        data = reordered_data_or_error.release_value();
+    } else {
+        dbgln("Warning: Could not reorder text: {}", reordered_data_or_error.error());
+    }
 
     auto data_view = data.bytes_as_string_view();
 

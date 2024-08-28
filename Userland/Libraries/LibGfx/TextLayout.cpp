@@ -29,6 +29,10 @@ void for_each_glyph_position(FloatPoint baseline_start, Utf8View string, Gfx::Fo
     hb_buffer_add_utf8(buffer, reinterpret_cast<char const*>(string.bytes()), string.byte_length(), 0, -1);
     hb_buffer_guess_segment_properties(buffer);
 
+    // TODO: Write note
+    // NOTE:
+    hb_buffer_set_direction(buffer, HB_DIRECTION_LTR);
+
     u32 glyph_count;
     auto* glyph_info = hb_buffer_get_glyph_infos(buffer, &glyph_count);
     Vector<hb_glyph_info_t> const input_glyph_info({ glyph_info, glyph_count });

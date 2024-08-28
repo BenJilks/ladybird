@@ -1,6 +1,7 @@
 include(${SerenityOS_SOURCE_DIR}/Meta/CMake/unicode_data.cmake)
 
 set(SOURCES
+    BiDi.cpp
     CharacterTypes.cpp
     Collator.cpp
     CurrencyCode.cpp
