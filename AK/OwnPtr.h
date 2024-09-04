@@ -88,6 +88,14 @@ public:
     }
 
     template<typename U>
+    OwnPtr& operator=(AtomicOwnPtr<U>&& other)
+    {
+        OwnPtr ptr(move(other));
+        swap(ptr);
+        return *this;
+    }
+
+    template<typename U>
     OwnPtr& operator=(NonnullOwnPtr<U>&& other)
     {
         OwnPtr ptr(move(other));
