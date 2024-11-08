@@ -41,6 +41,7 @@ public:
 
     virtual bool is_paintable() const override;
     void paint(PaintContext& context, DevicePixelRect const& dest_rect, CSS::ImageRendering image_rendering) const override;
+    Gfx::ImmutableBitmap const* bitmap(DevicePixelRect const& dest_rect) const override;
 
     virtual Optional<Gfx::Color> color_if_single_pixel_bitmap() const override;
     Gfx::ImmutableBitmap const* current_frame_bitmap(DevicePixelRect const& dest_rect) const;

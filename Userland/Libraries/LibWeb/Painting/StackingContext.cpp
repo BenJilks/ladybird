@@ -352,7 +352,16 @@ void StackingContext::paint(PaintContext& context) const
         }
     }
 
+    if (auto const& mask = computed_values.mask_image(); mask) {
+        auto masking_area = paintable_box().absolute_border_box_rect();
+        auto masking_area_rect = context.enclosing_device_rect(masking_area);
+        auto const* bitmap = mask->bitmap(masking_area_rect);
+        if (bitmap)
+            context.display_list_recorder().apply_mask_bitmap(masking_area_rect.to_type<int>().location(), bitmap->bitmap(), Gfx::Bitmap::MaskKind::Alpha);
+    }
+
     paint_internal(context);
+
     context.display_list_recorder().pop_stacking_context();
     if (paintable().is_paintable_box() && paintable_box().scroll_frame_id().has_value()) {
         context.display_list_recorder().pop_scroll_frame_id();

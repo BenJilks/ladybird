@@ -37,6 +37,7 @@ public:
 
     virtual bool is_paintable() const = 0;
     virtual void paint(PaintContext& context, DevicePixelRect const& dest_rect, ImageRendering) const = 0;
+    virtual Gfx::ImmutableBitmap const* bitmap(DevicePixelRect const&) const { return {}; }
 
     virtual Optional<Gfx::Color> color_if_single_pixel_bitmap() const { return {}; }
 };
