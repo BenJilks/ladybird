@@ -1859,6 +1859,18 @@
     ],
     "initial": "none"
   },
+  "mask-image": {
+    "animation-type": "discrete",
+    "inherited": false,
+    "affects-layout": false,
+    "valid-types": [
+      "image"
+    ],
+    "valid-identifiers": [
+      "none"
+    ],
+    "initial": "none"
+  },
   "mask-type": {
     "animation-type": "discrete",
     "inherited": false,
