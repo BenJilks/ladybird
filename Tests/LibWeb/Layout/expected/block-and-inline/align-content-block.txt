@@ -1,0 +1,28 @@
+Viewport <#document> at (0,0) content-size 800x600 children: not-inline
+  BlockContainer <html> at (0,0) content-size 800x262 [BFC] children: not-inline
+    BlockContainer <body> at (8,8) content-size 784x246 children: not-inline
+      BlockContainer <div.content.start> at (9,9) content-size 782x80 [BFC] children: not-inline
+        BlockContainer <div.box> at (9,9) content-size 25x25 children: not-inline
+      BlockContainer <(anonymous)> at (8,90) content-size 784x0 children: inline
+        TextNode <#text>
+      BlockContainer <div.content.center> at (9,91) content-size 782x80 [BFC] children: not-inline
+        BlockContainer <div.box> at (9,118.5) content-size 25x25 children: not-inline
+      BlockContainer <(anonymous)> at (8,172) content-size 784x0 children: inline
+        TextNode <#text>
+      BlockContainer <div.content.end> at (9,173) content-size 782x80 [BFC] children: not-inline
+        BlockContainer <div.box> at (9,228) content-size 25x25 children: not-inline
+      BlockContainer <(anonymous)> at (8,254) content-size 784x0 children: inline
+        TextNode <#text>
+
+ViewportPaintable (Viewport<#document>) [0,0 800x600]
+  PaintableWithLines (BlockContainer<HTML>) [0,0 800x262]
+    PaintableWithLines (BlockContainer<BODY>) [8,8 784x246]
+      PaintableWithLines (BlockContainer<DIV>.content.start) [8,8 784x82]
+        PaintableWithLines (BlockContainer<DIV>.box) [9,9 25x25]
+      PaintableWithLines (BlockContainer(anonymous)) [8,90 784x0]
+      PaintableWithLines (BlockContainer<DIV>.content.center) [8,90 784x82]
+        PaintableWithLines (BlockContainer<DIV>.box) [9,118.5 25x25]
+      PaintableWithLines (BlockContainer(anonymous)) [8,172 784x0]
+      PaintableWithLines (BlockContainer<DIV>.content.end) [8,172 784x82]
+        PaintableWithLines (BlockContainer<DIV>.box) [9,228 25x25]
+      PaintableWithLines (BlockContainer(anonymous)) [8,254 784x0]

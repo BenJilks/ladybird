@@ -121,6 +121,11 @@ bool FormattingContext::creates_block_formatting_context(Box const& box)
         // The element is expected to establish a new block formatting context.
         return true;
 
+    // https://drafts.csswg.org/css-align/#distribution-block
+    // All values other than normal force the block container to establish an independent formatting context.
+    if (box.computed_values().align_content() != CSS::AlignContent::Normal)
+        return true;
+
     return false;
 }
 

@@ -878,6 +878,51 @@ void BlockFormattingContext::layout_block_level_children(BlockContainer const& b
             block_container_state.set_content_height(bottom_of_lowest_margin_box);
         }
     }
+
+    align_block_level_children(block_container, bottom_of_lowest_margin_box);
+}
+
+// https://drafts.csswg.org/css-align
+void BlockFormattingContext::align_block_level_children(BlockContainer const& block_container, CSSPixels subject_height)
+{
+    auto container_height = m_state.get(block_container).content_height();
+
+    CSSPixels y_offset = 0;
+    switch (block_container.computed_values().align_content()) {
+    // https://drafts.csswg.org/css-align/#positional-values
+    case CSS::AlignContent::Normal:
+    case CSS::AlignContent::Start:
+    case CSS::AlignContent::FlexStart:
+        // Aligns the alignment subject to be flush with the alignment container’s start edge in the appropriate axis.
+        y_offset = 0;
+        break;
+
+    case CSS::AlignContent::Center:
+        // Centers the alignment subject within its alignment container.
+        y_offset = container_height / 2 - subject_height / 2;
+        break;
+
+    case CSS::AlignContent::End:
+    case CSS::AlignContent::FlexEnd:
+        // Aligns the alignment subject to be flush with the alignment container’s end edge in the appropriate axis.
+        y_offset = container_height - subject_height;
+        break;
+
+    // TODO: https://drafts.csswg.org/css-align/#distribution-values
+    case CSS::AlignContent::SpaceBetween:
+    case CSS::AlignContent::SpaceAround:
+    case CSS::AlignContent::SpaceEvenly:
+    case CSS::AlignContent::Stretch:
+        break;
+    }
+
+    if (y_offset != 0) {
+        block_container.for_each_child_of_type<NodeWithStyle>([&](NodeWithStyle& box) {
+            auto& state = m_state.get_mutable(box);
+            state.set_content_y(state.offset.y() + y_offset);
+            return IterationDecision::Continue;
+        });
+    }
 }
 
 void BlockFormattingContext::resolve_vertical_box_model_metrics(Box const& box, CSSPixels width_of_containing_block)
