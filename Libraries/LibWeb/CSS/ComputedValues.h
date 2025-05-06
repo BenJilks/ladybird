@@ -131,7 +131,7 @@ public:
     static CSS::JustifyContent justify_content() { return CSS::JustifyContent::FlexStart; }
     static CSS::JustifyItems justify_items() { return CSS::JustifyItems::Legacy; }
     static CSS::JustifySelf justify_self() { return CSS::JustifySelf::Auto; }
-    static CSS::AlignContent align_content() { return CSS::AlignContent::Stretch; }
+    static CSS::AlignContent align_content() { return CSS::AlignContent::Normal; }
     static CSS::AlignItems align_items() { return CSS::AlignItems::Stretch; }
     static CSS::AlignSelf align_self() { return CSS::AlignSelf::Auto; }
     static CSS::Appearance appearance() { return CSS::Appearance::Auto; }
